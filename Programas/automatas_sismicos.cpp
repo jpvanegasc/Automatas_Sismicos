@@ -8,14 +8,12 @@
 #include"Random64.h"
 using namespace std;
 
-const int square = 512;
-const int square2 = square * square;
-const int limit = square2 * 0.7;
+const int square = 256;
 
 const int Lx = square;
 const int Ly = square;
-const double F_th = 2.0;
-const double alpha = 0.2; // 0.25, 0.2, 0.15, 0.1, 0.075, 0.025
+const float F_th = 2.0;
+const float alpha = 0.15; // (0.25, 0.2, 0.15, 0.1, 0.075, 0.025 || 0.21, 0.18, 0.15
 
 void InicieAnimacion(void);
 void Cuadro(int t);
@@ -23,7 +21,7 @@ void Cuadro(int t);
 /* ---------- CLASE AUTÓMATA ---------- */
 class Automata{
 	private:
-		double fault[Lx][Ly], max_cell, stress_total, energia; 
+		float fault[Lx][Ly], max_cell, stress_total, energia; 
 		unsigned int fallas_total; bool falla_activa;
 		vector<vector<int>> over_F_th;
 	public:
@@ -47,7 +45,7 @@ class Automata{
 					// El resto de la matriz
 					else{
 						// Cargar la matriz
-						double ran_num = ran64.r()*F_th;
+						float ran_num = ran64.r()*F_th;
 						fault[i][j] = ran_num;
 						// Actualizar la celda con más estrés
 						if(ran_num > max_cell){
@@ -66,13 +64,13 @@ class Automata{
 			for(int iter = 0; iter<over_cells.size(); iter++){
 				int i, j; i = over_cells[iter][0]; j = over_cells[iter][1];
 				// Repartir en las vecinas
-				double cambiar; cambiar = fault[i][j]*alpha;
+				float cambiar; cambiar = fault[i][j]*alpha;
 				if(i != 1) fault[i-1][j] += cambiar; // Derecha
 				if(i != Lx-2) fault[i+1][j] += cambiar; // Izquierda
 				if(j != 1) fault[i][j-1] += cambiar; // Arriba
 				if(j != Ly-2) fault[i][j+1] += cambiar; // Abajo
 				// Borrar celda actual
-				energia += fault[i][j]; 
+				//energia += fault[i][j]; 
 				fault[i][j] = 0; 
 				fallas_total += 1;
 			}
@@ -83,18 +81,20 @@ class Automata{
 		 *  buscando celda por celda
 		 */
 		void distribuya_long(void){
-			int fallas_actual=0; max_cell=0; 
+			unsigned int fallas_actual=0; max_cell=0;
+			float total = 0;
 			for(int i=1; i<Lx-1; i++)
 				for(int j=1; j<Ly-1; j++){
+					total += fault[i][j];
 					if(fault[i][j] >= F_th){ // Si hay falla
 						// Repartir en las vecinas
-						double cambiar; cambiar = fault[i][j]*alpha;
+						float cambiar; cambiar = fault[i][j]*alpha;
 						if(i != 1) fault[i-1][j] += cambiar; // Derecha
 						if(i != Lx-2) fault[i+1][j] += cambiar; // Izquierda
 						if(j != 1) fault[i][j-1] += cambiar; // Arriba
 						if(j != Ly-2) fault[i][j+1] += cambiar; // Abajo
 						// Borrar celda actual
-						energia += fault[i][j]; 
+						//energia += fault[i][j]; 
 						fault[i][j] = 0; 
 						fallas_actual += 1; 
 					}
@@ -102,20 +102,23 @@ class Automata{
 					else if(fault[i][j] > max_cell){
 						max_cell = fault[i][j];
 					}
+
 				}
 			if(fallas_actual != 0){ // Si hubo falla
 				fallas_total += fallas_actual;
 				falla_activa = true;
 			}
-			else // Si ninguna falló
+			else{ // Si ninguna falló
 				falla_activa = false;
+				stress_total = total;
+			}
 		}
 		/** 
 		 * Fallar todas las celdas que en un paso de tiempo superan el valor máximo
 		 */
 		void aumente(void){
 			// Calcular aumento
-			double d_F = F_th - max_cell;
+			float d_F = F_th - max_cell;
 			// Aumentar
 			for(int i=1; i<Lx-1; i++)
 				for(int j=1;  j<Ly-1; j++){
@@ -134,7 +137,7 @@ class Automata{
 				distribuya_long();
 		}
 		// Retorna la suma de toda la matriz
-		double total_stress(void){
+		float total_stress(void){
 			stress_total = 0;
 			for(int i=0; i<Lx; i++)
 				for(int j=0; j<Ly; j++)
@@ -142,10 +145,11 @@ class Automata{
 			return stress_total;
 		}
 		void delete_fallas(void){fallas_total = 0;}
-        void delete_energia(void){energia = 0;}
+		void delete_energia(void){energia = 0;}
 		int get_fallas(void){return fallas_total;}
-    	double get_energia(void){return energia;}
-		double max_F(void){return max_cell;}
+		float get_energia(void){return energia;}
+		float get_total(void){return stress_total;}
+		float max_F(void){return max_cell;}
 		void guardar_archivo(int t, bool print_as_matrix);
 };
 
@@ -153,17 +157,26 @@ class Automata{
 int main(void){
 	Automata Shaky;
 	Crandom ran64(1);
-	int t, t_max = 5e5;
+	unsigned int t, t_max = 1e7, t_eq = 4e7;
 	
 	Shaky.inicie(ran64);
-
-	for(t=0; t<t_max; t++){
-	    Shaky.delete_fallas();
+	
+	string filename;
+	stringstream l, a; l << square; 
+	if(alpha<0.1){ a << alpha*1000; filename = "L" + l.str() + "_a00" + a.str() + ".txt";}
+	else{ a << alpha*100; filename = "L" + l.str() + "_a0" + a.str() + ".txt";}
+	ofstream file(filename.c_str());
+	
+	for(t=0; t<t_max+t_eq; t++){
+		Shaky.delete_fallas();
 		Shaky.aumente();
-		cout<<t<<'\t'<<Shaky.total_stress()<<'\n';	
-		//cout<<Shaky.get_fallas()<<'\n';	
+		if(t>=t_eq) {file<<Shaky.get_fallas()<<'\n'; if(t%100000 == 0) cout<<t<<'\n';}
+		//cout<<t<<'\t'<<Shaky.get_total()<<'\n';
 	}
 	
+	file<<endl;
+	file.close();
+
 	return 0;
 }
 
