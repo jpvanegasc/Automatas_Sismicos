@@ -1,3 +1,4 @@
+// Autómata Sísmico optimizado usando memoria dinámica
 #include<iostream>
 #include<fstream>
 #include<sstream>
@@ -7,8 +8,17 @@
 #include"Random64.h"
 using namespace std;
 
-int square, Lx=8, Ly=8;
+const int square = 32;
 
+const int Lx = square;
+const int Ly = square;
+const float F_th = 2.0;
+const float alpha = 0.15; // (0.25, 0.2, 0.15, 0.1, 0.075, 0.025 || 0.21, 0.18, 0.15
+
+void InicieAnimacion(void);
+void Cuadro(int t);
+
+/* ---------- CLASE AUTÓMATA ---------- */
 class Automata{
 	private:
 		float fault[Lx][Ly], max_cell, stress_total, energia; 
@@ -19,8 +29,6 @@ class Automata{
 			max_cell=0; 
 			falla_activa=false; fallas_total = 0; 
 			stress_total = 0; energia=0;
-			square=10;
-			Lx = square; Ly = square;
 		}
 		/**
 		 * Inicializar los valores de la matriz de estrés
@@ -53,7 +61,7 @@ class Automata{
 		 * @param over_cells: posiciones de las celdas que superaron el umbral
 		 */
 		void distribuya_short(vector<vector<int>> &over_cells){
-			for(int iter = 0; iter<over_cells.size(); iter++){
+			for(unsigned int iter = 0; iter<over_cells.size(); iter++){
 				int i, j; i = over_cells[iter][0]; j = over_cells[iter][1];
 				// Repartir en las vecinas
 				float cambiar; cambiar = fault[i][j]*alpha;
@@ -144,3 +152,81 @@ class Automata{
 		float max_F(void){return max_cell;}
 		void guardar_archivo(int t, bool print_as_matrix);
 };
+
+/* ---------- MAIN ---------- */
+int main(void){
+	Automata Shaky;
+	Crandom ran64(1);
+	//unsigned int t, t_max = 1e7, t_eq = 4e7;
+	unsigned int t, t_max = 1e2, t_eq = 1e2;
+	
+	Shaky.inicie(ran64);
+	
+	string filename;
+	stringstream l, a; l << square; 
+	if(alpha<0.1){ a << alpha*1000; filename = "L" + l.str() + "_a00" + a.str() + ".txt";}
+	else{ a << alpha*100; filename = "L" + l.str() + "_a0" + a.str() + ".txt";}
+	ofstream file(filename.c_str());
+	
+	for(t=0; t<t_max+t_eq; t++){
+		Shaky.delete_fallas();
+		Shaky.aumente();
+		if(t>=t_eq) {file<<Shaky.get_fallas()<<'\n'; if(t%100000 == 0) cout<<t<<'\n';}
+		//cout<<t<<'\t'<<Shaky.get_total()<<'\n';
+	}
+	
+	file<<endl;
+	file.close();
+
+	return 0;
+}
+
+/* ---------- AUXILIARES ---------- */
+/**
+ * Guarda la matriz de estrés como un archivo para un paso de tiempo específico
+ * @param t: Determina el nombre del archivo con el que se guarda
+ * @param print_as_matrix: 
+ */
+void Automata::guardar_archivo(int t, bool print_as_matrix){
+    string filename;
+	//ofstream MiArchivo("Resultados.dat"); //COMENTAR PARA ANIMAR
+	//DESCOMENTAR PARA ANIMAR
+	ofstream MiArchivo;
+	stringstream a;
+	a << t;
+	filename = "./Resultados" + a.str();
+	filename+= ".dat";
+	MiArchivo.open(filename.c_str(),ios::out);
+	
+	if(print_as_matrix){
+		for(int i=0; i<Lx; i++){
+			for(int j=0; j<Ly; j++)
+					MiArchivo<<fault[i][j]<<'\t';
+			MiArchivo << '\n';
+		}
+		MiArchivo<<endl;
+		MiArchivo.close();
+	}
+	else{
+		for(int i=0; i<Lx; i++){
+			for(int j=0; j<Ly; j++)
+					MiArchivo<< i <<'\t'<< j << '\t' <<fault[i][j]<<'\n';
+			MiArchivo<< '\n';
+		}
+		MiArchivo<<endl;
+		MiArchivo.close();
+	}
+}
+
+void InicieAnimacion(void){
+  //cout<<"set terminal gif animate"<<endl;
+  //cout<<"set output 'pelicula.gif'"<<endl;
+  cout<<"set pm3d map"<<endl;
+  cout<<"set size ratio -1"<<endl;
+  cout<<"set xrange [0:"<<Lx<<"]"<<endl;
+  cout<<"set yrange [0:"<<Ly<<"]"<<endl;
+}
+
+void Cuadro(int t){
+  cout<<"plot 'Resultados"<<t<<".dat' matrix with image"<<endl;
+}
